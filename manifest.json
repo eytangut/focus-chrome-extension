@@ -1,0 +1,45 @@
+{
+  "manifest_version": 3,
+  "name": "Focus - AI-Powered Website Blocker",
+  "version": "1.0",
+  "description": "An intelligent website blocker that uses AI to manage your focus and productivity",
+  
+  "permissions": [
+    "storage",
+    "tabs",
+    "activeTab",
+    "webRequest",
+    "scripting"
+  ],
+  
+  "host_permissions": [
+    "<all_urls>"
+  ],
+  
+  "background": {
+    "service_worker": "background.js"
+  },
+  
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content.js"],
+      "css": ["styles.css"],
+      "run_at": "document_start"
+    }
+  ],
+  
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Focus Settings"
+  },
+  
+  "options_page": "settings.html",
+  
+  "web_accessible_resources": [
+    {
+      "resources": ["blocked.html", "blocked.js", "ai-chat.js", "styles.css"],
+      "matches": ["<all_urls>"]
+    }
+  ]
+}
