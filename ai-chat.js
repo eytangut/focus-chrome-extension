@@ -167,10 +167,11 @@ Scope: domain (entire ${domain}), page (just this specific page)
 Keep memory_notes brief and focused on the user's legitimate use cases for this domain. This helps you make consistent decisions in future visits.`;
 
         try {
-            const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${result.geminiApiKey}`, {
+            const response = await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${result.geminiApiKey}`,
                 },
                 body: JSON.stringify({
                     contents: [{
