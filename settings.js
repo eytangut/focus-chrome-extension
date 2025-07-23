@@ -378,6 +378,7 @@ async function exportData() {
             'blacklist',
             'temporaryAllowed',
             'deniedCooldowns',
+            'aiMemory',
             'settings'
         ]);
         
@@ -422,7 +423,7 @@ async function importData(event) {
         }
         
         // Import data (excluding API key for security)
-        const importKeys = ['whitelist', 'blacklist', 'temporaryAllowed', 'deniedCooldowns', 'settings'];
+        const importKeys = ['whitelist', 'blacklist', 'temporaryAllowed', 'deniedCooldowns', 'aiMemory', 'settings'];
         const toImport = {};
         
         importKeys.forEach(key => {

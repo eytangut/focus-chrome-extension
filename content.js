@@ -205,8 +205,6 @@
   }
 
   function initializeBlockedPage() {
-    let conversationHistory = [];
-    
     // Check if in cooldown
     checkCooldownStatus();
     
@@ -254,11 +252,6 @@
       
       // Add initial AI message
       addMessage('ai', 'Hello! I see you want to access ' + window.location.hostname + '. Can you tell me why you need to visit this site?');
-      
-      conversationHistory = [{
-        role: 'system',
-        content: 'You are an AI assistant helping users manage website access. The user wants to access: ' + window.location.href + '. Your job is to understand their reasoning and decide whether to grant access. You can: 1) Add to permanent whitelist (domain or page), 2) Allow once until tab closed (domain or page), 3) Allow temporarily for a time period (domain or page), 4) Deny request. Be conversational but focused on understanding their need.'
-      }];
     }
     
     function addMessage(sender, content) {
@@ -325,14 +318,8 @@
     }
     
     async function getAIResponse(userMessage) {
-      // Add user message to conversation history
-      conversationHistory.push({
-        role: 'user',
-        content: userMessage
-      });
-      
       // Get Gemini API key and user tasks from storage
-      const result = await chrome.storage.local.get(['geminiApiKey', 'userTasks']);
+      const result = await chrome.storage.local.get(['geminiApiKey', 'userTasks', 'aiMemory']);
       if (!result.geminiApiKey) {
         throw new Error('Gemini API key not configured. Please set it in extension settings.');
       }
@@ -340,32 +327,41 @@
       // Get current whitelist for context
       const whitelistResponse = await chrome.runtime.sendMessage({ type: 'GET_WHITELIST' });
       
-      // Simplified prompt that works better with Gemini
+      // Get AI's previous notes about this domain
+      const domain = window.location.hostname;
+      const aiMemory = result.aiMemory || {};
+      const domainMemory = aiMemory[domain] || { notes: '', lastUpdated: 0 };
+      
+      // Enhanced prompt that asks AI to update its memory
       const systemPrompt = `You are helping manage website access. User wants to access: ${window.location.href}
 
 Current context:
-- Site: ${window.location.hostname}
+- Site: ${domain}
 - Page title: ${document.title || 'Unknown'}
 - User tasks: ${result.userTasks || 'No specific tasks defined'}
 - Current whitelist includes: ${(whitelistResponse.whitelist || []).length} sites
 
+Your previous notes about this domain: ${domainMemory.notes || 'No previous notes'}
+
 User message: ${userMessage}
 
-Please respond as a helpful assistant. If you think access should be granted, respond EXACTLY in this JSON format:
-{"message": "your response", "decision": {"type": "permanent_whitelist|allow_once|allow_temporary|deny", "scope": "domain|page", "duration": 3600000, "reasoning": "your reason"}}
+Please respond with a JSON object containing:
+{
+  "message": "your conversational response to the user",
+  "memory_notes": "brief notes about this interaction that you want to remember for future visits to this domain (or null if no notes needed)",
+  "decision": null OR {
+    "type": "permanent_whitelist|allow_once|allow_temporary|deny",
+    "scope": "domain|page", 
+    "duration": 3600000,
+    "reasoning": "your reason"
+  }
+}
 
-If you need more information, just respond with:
-{"message": "your question to the user", "decision": null}
+If you need more information, respond with decision: null
+Types: permanent_whitelist (add to permanent whitelist), allow_once (allow until tab closed), allow_temporary (allow for specific time), deny (block access)
+Scope: domain (entire ${domain}), page (just this specific page)
 
-Types:
-- permanent_whitelist: add to permanent whitelist
-- allow_once: allow until tab closed  
-- allow_temporary: allow for specific time (include duration in milliseconds)
-- deny: block access
-
-Scope:
-- domain: entire domain (${window.location.hostname})
-- page: just this specific page`;
+Keep memory_notes brief and focused on the user's legitimate use cases for this domain. This helps you make consistent decisions in future visits.`;
 
       try {
         const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${result.geminiApiKey}`, {
@@ -402,6 +398,16 @@ Scope:
         // Try to parse as JSON, fallback to plain text
         try {
           const parsed = JSON.parse(aiMessage);
+          
+          // Update AI memory if provided
+          if (parsed.memory_notes) {
+            await chrome.runtime.sendMessage({
+              type: 'UPDATE_AI_MEMORY',
+              domain: domain,
+              notes: parsed.memory_notes
+            });
+          }
+          
           return parsed;
         } catch (parseError) {
           // If JSON parsing fails, return as plain message

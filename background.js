@@ -17,6 +17,7 @@ class FocusExtension {
       blacklist: [], // User-managed blacklist for blacklist mode
       temporaryAllowed: {}, // {domain: {expiry: timestamp, type: 'once'|'timed'}}
       deniedCooldowns: {}, // {domain: timestamp}
+      aiMemory: {}, // {domain: {notes: string, lastUpdated: timestamp}} - AI's persistent notes per domain
       geminiApiKey: '',
       userTasks: '', // User's current tasks for AI context
       settings: {
@@ -24,7 +25,7 @@ class FocusExtension {
       }
     };
 
-    const stored = await chrome.storage.local.get(['whitelist', 'blacklist', 'temporaryAllowed', 'deniedCooldowns', 'geminiApiKey', 'userTasks', 'settings']);
+    const stored = await chrome.storage.local.get(['whitelist', 'blacklist', 'temporaryAllowed', 'deniedCooldowns', 'aiMemory', 'geminiApiKey', 'userTasks', 'settings']);
     
     // Initialize missing keys with defaults
     for (const [key, value] of Object.entries(defaultSettings)) {
@@ -206,6 +207,11 @@ class FocusExtension {
           sendResponse({ success: true });
           break;
 
+        case 'UPDATE_AI_MEMORY':
+          await this.updateAIMemory(message.domain, message.notes);
+          sendResponse({ success: true });
+          break;
+
         case 'GET_BLACKLIST':
           const { blacklist } = await chrome.storage.local.get(['blacklist']);
           sendResponse({ blacklist });
@@ -292,6 +298,15 @@ class FocusExtension {
     const { deniedCooldowns } = await chrome.storage.local.get(['deniedCooldowns']);
     deniedCooldowns[domain] = Date.now();
     await chrome.storage.local.set({ deniedCooldowns });
+  }
+
+  async updateAIMemory(domain, notes) {
+    const { aiMemory } = await chrome.storage.local.get(['aiMemory']);
+    aiMemory[domain] = {
+      notes: notes,
+      lastUpdated: Date.now()
+    };
+    await chrome.storage.local.set({ aiMemory });
   }
 
   async cleanupTabPermissions(tabId) {
