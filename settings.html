@@ -224,6 +224,26 @@
             color: #666;
             margin-top: 5px;
         }
+        
+        .mode-indicator {
+            margin-top: 15px;
+            padding: 10px;
+            border-radius: 6px;
+            font-weight: 600;
+            text-align: center;
+        }
+        
+        .mode-indicator.ai-mode {
+            background: rgba(102, 126, 234, 0.1);
+            border: 1px solid rgba(102, 126, 234, 0.3);
+            color: #667eea;
+        }
+        
+        .mode-indicator.blacklist-mode {
+            background: rgba(255, 193, 7, 0.1);
+            border: 1px solid rgba(255, 193, 7, 0.3);
+            color: #ffc107;
+        }
     </style>
 </head>
 <body>
@@ -260,6 +280,21 @@
                         <label for="blockingEnabled">Enable website blocking</label>
                     </div>
                     <div class="help-text">When disabled, all websites will be accessible without AI intervention.</div>
+                </div>
+            </div>
+            
+            <!-- Task Management -->
+            <div class="section">
+                <h2>📋 Your Tasks</h2>
+                <p style="margin-bottom: 15px;">Define your current tasks to help the AI make better decisions. When no tasks are defined, the extension switches to simple blacklist mode.</p>
+                <div class="form-group">
+                    <label for="userTasks">Current Tasks & Goals</label>
+                    <textarea id="userTasks" placeholder="Example:&#10;- Working on React project for client ABC&#10;- Research on machine learning for thesis&#10;- Learning Spanish for upcoming trip&#10;- Planning vacation to Europe"></textarea>
+                    <div class="help-text">List your current work projects, studies, or goals. The AI will use this context when deciding whether to grant access to websites.</div>
+                </div>
+                <button id="saveTasks" class="btn">Save Tasks</button>
+                <div id="modeIndicator" class="mode-indicator">
+                    <span id="modeText">AI Mode: Active</span>
                 </div>
             </div>
             

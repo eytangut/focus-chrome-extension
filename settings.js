@@ -13,6 +13,9 @@ function setupEventListeners() {
     // Extension settings
     document.getElementById('blockingEnabled').addEventListener('change', saveExtensionSettings);
     
+    // Task management
+    document.getElementById('saveTasks').addEventListener('click', saveTasks);
+    
     // Whitelist management
     document.getElementById('addToWhitelist').addEventListener('click', addToWhitelist);
     
@@ -33,7 +36,8 @@ async function loadSettings() {
             'settings', 
             'whitelist',
             'temporaryAllowed',
-            'deniedCooldowns'
+            'deniedCooldowns',
+            'userTasks'
         ]);
         
         // Load API key (mask it for security)
@@ -46,6 +50,14 @@ async function loadSettings() {
         if (result.settings) {
             document.getElementById('blockingEnabled').checked = result.settings.blockingEnabled !== false;
         }
+        
+        // Load user tasks
+        if (result.userTasks) {
+            document.getElementById('userTasks').value = result.userTasks;
+        }
+        
+        // Update mode indicator
+        updateModeIndicator(result.userTasks);
         
         // Load whitelist
         if (result.whitelist) {
@@ -144,6 +156,37 @@ async function saveExtensionSettings() {
         showStatus('Settings saved successfully', 'success');
     } catch (error) {
         showStatus('Error saving settings: ' + error.message, 'error');
+    }
+}
+
+async function saveTasks() {
+    const tasks = document.getElementById('userTasks').value.trim();
+    
+    try {
+        await chrome.storage.local.set({ userTasks: tasks });
+        updateModeIndicator(tasks);
+        showStatus('Tasks saved successfully', 'success');
+        
+        // Notify background script of mode change
+        chrome.runtime.sendMessage({
+            type: 'TASKS_UPDATED',
+            tasks: tasks
+        });
+    } catch (error) {
+        showStatus('Error saving tasks: ' + error.message, 'error');
+    }
+}
+
+function updateModeIndicator(tasks) {
+    const indicator = document.getElementById('modeIndicator');
+    const modeText = document.getElementById('modeText');
+    
+    if (!tasks || tasks.trim() === '') {
+        indicator.className = 'mode-indicator blacklist-mode';
+        modeText.textContent = 'Blacklist Mode: AI Disabled (Add tasks to enable AI)';
+    } else {
+        indicator.className = 'mode-indicator ai-mode';
+        modeText.textContent = 'AI Mode: Active with Task Context';
     }
 }
 

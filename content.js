@@ -80,7 +80,7 @@
           color: white !important;
           display: none !important;
         ">
-          This site was recently denied access. AI chat is temporarily unavailable.
+          This site was recently denied access. AI chat is temporarily unavailable for this site (45-minute cooldown per site).
         </div>
         
         <div id="actionButtons">

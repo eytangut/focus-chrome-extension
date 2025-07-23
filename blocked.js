@@ -23,7 +23,7 @@
                     <div class="focus-blocked-url">${window.location.href}</div>
                     
                     <div id="cooldownMessage" class="focus-cooldown-message" style="display: none;">
-                        This site was recently denied access. AI chat is temporarily unavailable.
+                        This site was recently denied access. AI chat is temporarily unavailable for this site (45-minute cooldown per site).
                     </div>
                     
                     <div id="actionButtons">

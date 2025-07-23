@@ -17,12 +17,13 @@ class FocusExtension {
       temporaryAllowed: {}, // {domain: {expiry: timestamp, type: 'once'|'timed'}}
       deniedCooldowns: {}, // {domain: timestamp}
       geminiApiKey: '',
+      userTasks: '', // User's current tasks for AI context
       settings: {
         blockingEnabled: true
       }
     };
 
-    const stored = await chrome.storage.local.get(['whitelist', 'temporaryAllowed', 'deniedCooldowns', 'geminiApiKey', 'settings']);
+    const stored = await chrome.storage.local.get(['whitelist', 'temporaryAllowed', 'deniedCooldowns', 'geminiApiKey', 'userTasks', 'settings']);
     
     // Initialize missing keys with defaults
     for (const [key, value] of Object.entries(defaultSettings)) {
@@ -69,8 +70,8 @@ class FocusExtension {
 
   async shouldBlockUrl(url) {
     try {
-      const { whitelist, temporaryAllowed, deniedCooldowns, settings } = 
-        await chrome.storage.local.get(['whitelist', 'temporaryAllowed', 'deniedCooldowns', 'settings']);
+      const { whitelist, temporaryAllowed, deniedCooldowns, settings, userTasks } = 
+        await chrome.storage.local.get(['whitelist', 'temporaryAllowed', 'deniedCooldowns', 'settings', 'userTasks']);
 
       if (!settings.blockingEnabled) return false;
 
@@ -85,6 +86,15 @@ class FocusExtension {
         }
       }
 
+      // Check if in blacklist mode (no tasks defined)
+      if (!userTasks || userTasks.trim() === '') {
+        // In blacklist mode - only block if explicitly in a blacklist
+        // Since we don't have a blacklist yet, allow all non-whitelisted sites
+        // This effectively disables AI blocking when no tasks are defined
+        return false;
+      }
+
+      // AI mode is active (tasks are defined)
       // Check temporary permissions
       if (temporaryAllowed[domain] || temporaryAllowed[fullPath]) {
         const permission = temporaryAllowed[domain] || temporaryAllowed[fullPath];
@@ -103,7 +113,7 @@ class FocusExtension {
         return true; // Block without AI chat
       }
 
-      return true; // Should be blocked
+      return true; // Should be blocked (AI mode)
     } catch (error) {
       console.error('Error checking if URL should be blocked:', error);
       return false; // Default to not blocking on error
@@ -185,6 +195,11 @@ class FocusExtension {
         case 'GET_WHITELIST':
           const { whitelist } = await chrome.storage.local.get(['whitelist']);
           sendResponse({ whitelist });
+          break;
+
+        case 'TASKS_UPDATED':
+          // Tasks were updated, no specific action needed as storage is already updated
+          sendResponse({ success: true });
           break;
 
         default:

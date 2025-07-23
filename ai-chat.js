@@ -134,8 +134,8 @@
             content: userMessage
         });
         
-        // Get Gemini API key from storage
-        const result = await chrome.storage.local.get(['geminiApiKey']);
+        // Get Gemini API key and user tasks from storage
+        const result = await chrome.storage.local.get(['geminiApiKey', 'userTasks']);
         if (!result.geminiApiKey) {
             throw new Error('Gemini API key not configured. Please set it in extension settings.');
         }
@@ -149,6 +149,11 @@
 Current whitelist: ${JSON.stringify(whitelistResponse.whitelist)}
 Page title: ${document.title || 'Unknown'}
 
+User's current tasks and goals:
+${result.userTasks || 'No tasks defined'}
+
+Consider the user's tasks when making decisions. Be more lenient if the site helps with their stated goals.
+
 Based on the conversation, decide if you should grant access. Respond with a JSON object containing:
 {
   "message": "Your conversational response to the user",
@@ -159,6 +164,10 @@ Based on the conversation, decide if you should grant access. Respond with a JSO
     "reasoning": "Your reasoning for this decision"
   }
 }
+
+For the scope:
+- "domain" applies to the entire domain (e.g., reddit.com and all subdomains/pages)
+- "page" applies only to this specific page/path
 
 Only make a decision when you have enough information. Ask follow-up questions if needed.`
         };
