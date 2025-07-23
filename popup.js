@@ -20,6 +20,7 @@ async function loadPopupData() {
         const result = await chrome.storage.local.get([
             'settings',
             'whitelist',
+            'blacklist',
             'temporaryAllowed',
             'deniedCooldowns',
             'geminiApiKey'

@@ -14,8 +14,10 @@ class FocusExtension {
         'edge://*',
         'about:*'
       ],
+      blacklist: [], // User-managed blacklist for blacklist mode
       temporaryAllowed: {}, // {domain: {expiry: timestamp, type: 'once'|'timed'}}
       deniedCooldowns: {}, // {domain: timestamp}
+      aiMemory: {}, // {domain: {notes: string, lastUpdated: timestamp}} - AI's persistent notes per domain
       geminiApiKey: '',
       userTasks: '', // User's current tasks for AI context
       settings: {
@@ -23,7 +25,7 @@ class FocusExtension {
       }
     };
 
-    const stored = await chrome.storage.local.get(['whitelist', 'temporaryAllowed', 'deniedCooldowns', 'geminiApiKey', 'userTasks', 'settings']);
+    const stored = await chrome.storage.local.get(['whitelist', 'blacklist', 'temporaryAllowed', 'deniedCooldowns', 'aiMemory', 'geminiApiKey', 'userTasks', 'settings']);
     
     // Initialize missing keys with defaults
     for (const [key, value] of Object.entries(defaultSettings)) {
@@ -70,8 +72,8 @@ class FocusExtension {
 
   async shouldBlockUrl(url) {
     try {
-      const { whitelist, temporaryAllowed, deniedCooldowns, settings, userTasks } = 
-        await chrome.storage.local.get(['whitelist', 'temporaryAllowed', 'deniedCooldowns', 'settings', 'userTasks']);
+      const { whitelist, blacklist, temporaryAllowed, deniedCooldowns, settings, userTasks } = 
+        await chrome.storage.local.get(['whitelist', 'blacklist', 'temporaryAllowed', 'deniedCooldowns', 'settings', 'userTasks']);
 
       if (!settings.blockingEnabled) return false;
 
@@ -79,7 +81,7 @@ class FocusExtension {
       const domain = urlObj.hostname;
       const fullPath = `${domain}${urlObj.pathname}`;
 
-      // Check whitelist (exact match and parent domains)
+      // Check whitelist (exact match and parent domains) - always allow whitelisted sites
       for (const whitelistEntry of whitelist) {
         if (this.matchesPattern(url, whitelistEntry)) {
           return false;
@@ -88,13 +90,26 @@ class FocusExtension {
 
       // Check if in blacklist mode (no tasks defined)
       if (!userTasks || userTasks.trim() === '') {
-        // In blacklist mode - only block if explicitly in a blacklist
-        // Since we don't have a blacklist yet, allow all non-whitelisted sites
-        // This effectively disables AI blocking when no tasks are defined
-        return false;
+        // In blacklist mode - only block if explicitly in blacklist
+        for (const blacklistEntry of blacklist || []) {
+          if (this.matchesPattern(url, blacklistEntry)) {
+            // Check temporary permissions for blacklisted sites
+            if (temporaryAllowed[domain] || temporaryAllowed[fullPath]) {
+              const permission = temporaryAllowed[domain] || temporaryAllowed[fullPath];
+              
+              if (permission.type === 'once') {
+                return false; // Allowed for this session
+              } else if (permission.type === 'timed' && Date.now() < permission.expiry) {
+                return false; // Temporary time-based permission still valid
+              }
+            }
+            return true; // Block blacklisted site
+          }
+        }
+        return false; // Not in blacklist, so allow
       }
 
-      // AI mode is active (tasks are defined)
+      // AI mode is active (tasks are defined) - block all non-whitelisted sites by default
       // Check temporary permissions
       if (temporaryAllowed[domain] || temporaryAllowed[fullPath]) {
         const permission = temporaryAllowed[domain] || temporaryAllowed[fullPath];
@@ -192,6 +207,16 @@ class FocusExtension {
           sendResponse({ success: true });
           break;
 
+        case 'UPDATE_AI_MEMORY':
+          await this.updateAIMemory(message.domain, message.notes);
+          sendResponse({ success: true });
+          break;
+
+        case 'GET_BLACKLIST':
+          const { blacklist } = await chrome.storage.local.get(['blacklist']);
+          sendResponse({ blacklist });
+          break;
+
         case 'GET_WHITELIST':
           const { whitelist } = await chrome.storage.local.get(['whitelist']);
           sendResponse({ whitelist });
@@ -250,6 +275,14 @@ class FocusExtension {
     }
   }
 
+  async addToBlacklist(entry) {
+    const { blacklist } = await chrome.storage.local.get(['blacklist']);
+    if (!blacklist.includes(entry)) {
+      blacklist.push(entry);
+      await chrome.storage.local.set({ blacklist });
+    }
+  }
+
   async addTemporaryPermission(entry, type, duration = null) {
     const { temporaryAllowed } = await chrome.storage.local.get(['temporaryAllowed']);
     
@@ -265,6 +298,15 @@ class FocusExtension {
     const { deniedCooldowns } = await chrome.storage.local.get(['deniedCooldowns']);
     deniedCooldowns[domain] = Date.now();
     await chrome.storage.local.set({ deniedCooldowns });
+  }
+
+  async updateAIMemory(domain, notes) {
+    const { aiMemory } = await chrome.storage.local.get(['aiMemory']);
+    aiMemory[domain] = {
+      notes: notes,
+      lastUpdated: Date.now()
+    };
+    await chrome.storage.local.set({ aiMemory });
   }
 
   async cleanupTabPermissions(tabId) {

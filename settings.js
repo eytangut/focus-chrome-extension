@@ -19,6 +19,9 @@ function setupEventListeners() {
     // Whitelist management
     document.getElementById('addToWhitelist').addEventListener('click', addToWhitelist);
     
+    // Blacklist management  
+    document.getElementById('addToBlacklist').addEventListener('click', addToBlacklist);
+    
     // Data management
     document.getElementById('exportData').addEventListener('click', exportData);
     document.getElementById('importData').addEventListener('click', () => {
@@ -35,6 +38,7 @@ async function loadSettings() {
             'geminiApiKey', 
             'settings', 
             'whitelist',
+            'blacklist',
             'temporaryAllowed',
             'deniedCooldowns',
             'userTasks'
@@ -64,6 +68,11 @@ async function loadSettings() {
             displayWhitelist(result.whitelist);
         }
         
+        // Load blacklist
+        if (result.blacklist) {
+            displayBlacklist(result.blacklist);
+        }
+        
     } catch (error) {
         showStatus('Error loading settings: ' + error.message, 'error');
     }
@@ -79,6 +88,32 @@ function displayWhitelist(whitelist) {
         item.innerHTML = `
             <span class="whitelist-url">${entry}</span>
             <button class="remove-btn" onclick="removeFromWhitelist(${index})">Remove</button>
+        `;
+        container.appendChild(item);
+    });
+}
+
+function displayBlacklist(blacklist) {
+    const container = document.getElementById('blacklistContainer');
+    container.innerHTML = '';
+    
+    if (blacklist.length === 0) {
+        container.innerHTML = '<p style="color: #666; font-style: italic; text-align: center; padding: 20px;">No sites in blacklist. Add sites above to block them in blacklist mode.</p>';
+        return;
+    }
+    
+    blacklist.forEach((entry, index) => {
+        const item = document.createElement('div');
+        item.className = 'whitelist-item'; // Reuse the same styling
+        item.innerHTML = `
+            <span class="whitelist-url">${entry}</span>
+            const button = document.createElement('button');
+            button.className = 'remove-btn';
+            button.textContent = 'Remove';
+            button.addEventListener('click', function() {
+                removeFromBlacklist(index);
+            });
+            item.appendChild(button);
         `;
         container.appendChild(item);
     });
@@ -121,28 +156,57 @@ async function testApiKey() {
         var keyToTest = apiKey;
     }
     
+    // Show testing status
+    showStatus('Testing API key...', 'info');
+    
     try {
-        const response = await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=' + keyToTest, {
+        const response = await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
+                'Authorization': `Bearer ${keyToTest}`,
             },
             body: JSON.stringify({
                 contents: [{
                     parts: [{
                         text: 'Hello, this is a test message. Please respond with "API key is working correctly."'
                     }]
-                }]
+                }],
+                generationConfig: {
+                    temperature: 0.1,
+                    maxOutputTokens: 50
+                }
             })
         });
         
         if (response.ok) {
-            showStatus('API key is working correctly!', 'success');
+            const data = await response.json();
+            if (data.candidates && data.candidates[0] && data.candidates[0].content) {
+                showStatus('API key is working correctly!', 'success');
+            } else {
+                showStatus('API key test failed: Invalid response format', 'error');
+            }
         } else {
-            showStatus('API key test failed: ' + response.statusText, 'error');
+            const errorText = await response.text();
+            let errorMessage = 'API key test failed: ';
+            
+            // Provide more specific error messages
+            if (response.status === 400) {
+                errorMessage += 'Invalid API key format or request';
+            } else if (response.status === 403) {
+                errorMessage += 'API key access denied - check permissions';
+            } else if (response.status === 404) {
+                errorMessage += 'API endpoint not found - check key validity';
+            } else {
+                errorMessage += `${response.status} - ${response.statusText}`;
+            }
+            
+            showStatus(errorMessage, 'error');
+            console.error('API Test Error:', errorText);
         }
     } catch (error) {
         showStatus('Error testing API key: ' + error.message, 'error');
+        console.error('API Test Exception:', error);
     }
 }
 
@@ -187,6 +251,53 @@ function updateModeIndicator(tasks) {
     } else {
         indicator.className = 'mode-indicator ai-mode';
         modeText.textContent = 'AI Mode: Active with Task Context';
+    }
+}
+
+async function addToBlacklist() {
+    const entry = document.getElementById('newBlacklistEntry').value.trim();
+    
+    if (!entry) {
+        showStatus('Please enter a website URL', 'error');
+        return;
+    }
+    
+    try {
+        const result = await chrome.storage.local.get(['blacklist']);
+        const blacklist = result.blacklist || [];
+        
+        if (blacklist.includes(entry)) {
+            showStatus('This entry is already in the blacklist', 'error');
+            return;
+        }
+        
+        blacklist.push(entry);
+        await chrome.storage.local.set({ blacklist });
+        
+        document.getElementById('newBlacklistEntry').value = '';
+        displayBlacklist(blacklist);
+        updateStatistics();
+        showStatus('Added to blacklist successfully', 'success');
+        
+    } catch (error) {
+        showStatus('Error adding to blacklist: ' + error.message, 'error');
+    }
+}
+
+async function removeFromBlacklist(index) {
+    try {
+        const result = await chrome.storage.local.get(['blacklist']);
+        const blacklist = result.blacklist || [];
+        
+        blacklist.splice(index, 1);
+        await chrome.storage.local.set({ blacklist });
+        
+        displayBlacklist(blacklist);
+        updateStatistics();
+        showStatus('Removed from blacklist', 'success');
+        
+    } catch (error) {
+        showStatus('Error removing from blacklist: ' + error.message, 'error');
     }
 }
 
@@ -241,11 +352,13 @@ async function updateStatistics() {
     try {
         const result = await chrome.storage.local.get([
             'whitelist',
+            'blacklist',
             'temporaryAllowed',
             'deniedCooldowns'
         ]);
         
         const whitelistCount = (result.whitelist || []).length;
+        const blacklistCount = (result.blacklist || []).length;
         const temporaryCount = Object.keys(result.temporaryAllowed || {}).length;
         
         // Count active cooldowns (within 45 minutes)
@@ -256,6 +369,7 @@ async function updateStatistics() {
         ).length;
         
         document.getElementById('whitelistCount').textContent = whitelistCount;
+        document.getElementById('blacklistCount').textContent = blacklistCount;
         document.getElementById('temporaryCount').textContent = temporaryCount;
         document.getElementById('cooldownCount').textContent = activeCooldowns;
         
@@ -268,8 +382,10 @@ async function exportData() {
     try {
         const data = await chrome.storage.local.get([
             'whitelist',
+            'blacklist',
             'temporaryAllowed',
             'deniedCooldowns',
+            'aiMemory',
             'settings'
         ]);
         
@@ -314,7 +430,7 @@ async function importData(event) {
         }
         
         // Import data (excluding API key for security)
-        const importKeys = ['whitelist', 'temporaryAllowed', 'deniedCooldowns', 'settings'];
+        const importKeys = ['whitelist', 'blacklist', 'temporaryAllowed', 'deniedCooldowns', 'aiMemory', 'settings'];
         const toImport = {};
         
         importKeys.forEach(key => {
@@ -392,5 +508,6 @@ function showStatus(message, type) {
     }, 5000);
 }
 
-// Make removeFromWhitelist globally available
+// Make removeFromWhitelist and removeFromBlacklist globally available
 window.removeFromWhitelist = removeFromWhitelist;
+window.removeFromBlacklist = removeFromBlacklist;
