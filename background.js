@@ -121,20 +121,41 @@ class FocusExtension {
     
     try {
       const urlObj = new URL(url);
-      const patternObj = new URL(pattern);
       
-      // Check if domain matches
-      if (urlObj.hostname === patternObj.hostname || urlObj.hostname.endsWith('.' + patternObj.hostname)) {
-        // If pattern has no path or is root, allow all paths
+      // Handle domain-only patterns (no protocol)
+      let patternObj;
+      if (!pattern.includes('://')) {
+        // Add https:// prefix for domain-only patterns
+        patternObj = new URL('https://' + pattern);
+      } else {
+        patternObj = new URL(pattern);
+      }
+      
+      // Check if domain matches (exact match or proper subdomain)
+      if (urlObj.hostname === patternObj.hostname) {
+        // Exact domain match
         if (!patternObj.pathname || patternObj.pathname === '/') {
           return true;
         }
-        // Check if URL path starts with pattern path
         return urlObj.pathname.startsWith(patternObj.pathname);
+      } else if (urlObj.hostname.endsWith('.' + patternObj.hostname)) {
+        // Subdomain match - ensure it's a proper subdomain
+        const prefix = urlObj.hostname.substring(0, urlObj.hostname.length - patternObj.hostname.length - 1);
+        if (prefix && !prefix.includes('.')) {
+          // It's a direct subdomain (like sub.example.com, not sub.other.example.com)
+          if (!patternObj.pathname || patternObj.pathname === '/') {
+            return true;
+          }
+          return urlObj.pathname.startsWith(patternObj.pathname);
+        }
       }
     } catch (error) {
-      // Fallback to simple string matching
-      return url.includes(pattern) || url.startsWith(pattern);
+      // Fallback: only match if the pattern is exactly contained at the start or as a full component
+      // This is for cases where URL parsing fails
+      if (pattern.startsWith('http') || pattern.startsWith('chrome')) {
+        return url === pattern;
+      }
+      return false;
     }
     
     return false;
