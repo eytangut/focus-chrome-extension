@@ -107,7 +107,13 @@ function displayBlacklist(blacklist) {
         item.className = 'whitelist-item'; // Reuse the same styling
         item.innerHTML = `
             <span class="whitelist-url">${entry}</span>
-            <button class="remove-btn" onclick="removeFromBlacklist(${index})">Remove</button>
+            const button = document.createElement('button');
+            button.className = 'remove-btn';
+            button.textContent = 'Remove';
+            button.addEventListener('click', function() {
+                removeFromBlacklist(index);
+            });
+            item.appendChild(button);
         `;
         container.appendChild(item);
     });
