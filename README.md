@@ -12,7 +12,7 @@ Focus is a Chrome extension that uses artificial intelligence to help you mainta
 
 ### 🤖 AI-Powered Access Control
 - When a blocked site is accessed, users can request access through an AI chat interface
-- Uses Google's Gemini API for intelligent conversation
+- Uses Google's Gemini 1.5 Flash API for intelligent conversation
 - AI considers:
   - Current whitelist
   - Blocked website information (title, URL)
