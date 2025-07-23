@@ -160,6 +160,12 @@
             border: 1px solid #f5c6cb;
         }
         
+        .status-info {
+            background: #d1ecf1;
+            color: #0c5460;
+            border: 1px solid #bee5eb;
+        }
+        
         .help-text {
             font-size: 12px;
             color: #666;
@@ -313,6 +319,21 @@
                 <button id="addToWhitelist" class="btn">Add to Whitelist</button>
             </div>
             
+            <!-- Blacklist Management -->
+            <div class="section">
+                <h2>🚫 Blacklist Management</h2>
+                <p style="margin-bottom: 15px;">When no tasks are defined, the extension uses this blacklist to block specific sites. All other sites are allowed.</p>
+                <div id="blacklistContainer">
+                    <!-- Blacklist items will be populated here -->
+                </div>
+                <div class="form-group" style="margin-top: 20px;">
+                    <label for="newBlacklistEntry">Add Website to Block</label>
+                    <input type="text" id="newBlacklistEntry" placeholder="example.com or example.com/specific-page">
+                    <div class="help-text">Sites in the blacklist will be blocked when the extension is in blacklist mode (no tasks defined).</div>
+                </div>
+                <button id="addToBlacklist" class="btn">Add to Blacklist</button>
+            </div>
+            
             <!-- Statistics -->
             <div class="section">
                 <h2>📊 Statistics</h2>
@@ -320,6 +341,10 @@
                     <div class="stat-card">
                         <div class="stat-number" id="whitelistCount">0</div>
                         <div class="stat-label">Whitelisted Sites</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-number" id="blacklistCount">0</div>
+                        <div class="stat-label">Blacklisted Sites</div>
                     </div>
                     <div class="stat-card">
                         <div class="stat-number" id="temporaryCount">0</div>

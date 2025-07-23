@@ -6,6 +6,15 @@
 
   async function checkIfBlocked() {
     try {
+      // First check if blocking is enabled - exit early if disabled
+      const settingsResult = await chrome.storage.local.get(['settings']);
+      const blockingEnabled = settingsResult.settings?.blockingEnabled !== false;
+      
+      if (!blockingEnabled) {
+        // Extension is disabled, don't interfere with the page at all
+        return;
+      }
+      
       const response = await chrome.runtime.sendMessage({
         type: 'CHECK_BLOCKED',
         url: window.location.href
@@ -322,8 +331,8 @@
         content: userMessage
       });
       
-      // Get Gemini API key from storage
-      const result = await chrome.storage.local.get(['geminiApiKey']);
+      // Get Gemini API key and user tasks from storage
+      const result = await chrome.storage.local.get(['geminiApiKey', 'userTasks']);
       if (!result.geminiApiKey) {
         throw new Error('Gemini API key not configured. Please set it in extension settings.');
       }
@@ -331,50 +340,79 @@
       // Get current whitelist for context
       const whitelistResponse = await chrome.runtime.sendMessage({ type: 'GET_WHITELIST' });
       
-      const systemContext = `You are managing access to: ${window.location.href}
-Current whitelist: ${JSON.stringify(whitelistResponse.whitelist)}
-Page title: ${document.title || 'Unknown'}
+      // Simplified prompt that works better with Gemini
+      const systemPrompt = `You are helping manage website access. User wants to access: ${window.location.href}
 
-Based on the conversation, decide if you should grant access. Respond with a JSON object containing:
-{
-  "message": "Your conversational response to the user",
-  "decision": null OR {
-    "type": "permanent_whitelist" | "allow_once" | "allow_temporary" | "deny",
-    "scope": "domain" | "page",
-    "duration": milliseconds (only for allow_temporary),
-    "reasoning": "Your reasoning for this decision"
-  }
-}
+Current context:
+- Site: ${window.location.hostname}
+- Page title: ${document.title || 'Unknown'}
+- User tasks: ${result.userTasks || 'No specific tasks defined'}
+- Current whitelist includes: ${(whitelistResponse.whitelist || []).length} sites
 
-Only make a decision when you have enough information. Ask follow-up questions if needed.`;
-      
-      const response = await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=' + result.geminiApiKey, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          contents: [{
-            parts: [{
-              text: systemContext + '\n\nConversation:\n' + 
-                    conversationHistory.map(msg => `${msg.role}: ${msg.content}`).join('\n')
-            }]
-          }]
-        })
-      });
-      
-      if (!response.ok) {
-        throw new Error('Failed to get AI response: ' + response.statusText);
-      }
-      
-      const data = await response.json();
-      const aiMessage = data.candidates[0].content.parts[0].text;
-      
-      // Try to parse as JSON, fallback to plain text
+User message: ${userMessage}
+
+Please respond as a helpful assistant. If you think access should be granted, respond EXACTLY in this JSON format:
+{"message": "your response", "decision": {"type": "permanent_whitelist|allow_once|allow_temporary|deny", "scope": "domain|page", "duration": 3600000, "reasoning": "your reason"}}
+
+If you need more information, just respond with:
+{"message": "your question to the user", "decision": null}
+
+Types:
+- permanent_whitelist: add to permanent whitelist
+- allow_once: allow until tab closed  
+- allow_temporary: allow for specific time (include duration in milliseconds)
+- deny: block access
+
+Scope:
+- domain: entire domain (${window.location.hostname})
+- page: just this specific page`;
+
       try {
-        return JSON.parse(aiMessage);
-      } catch {
-        return { message: aiMessage, decision: null };
+        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${result.geminiApiKey}`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            contents: [{
+              parts: [{
+                text: systemPrompt
+              }]
+            }],
+            generationConfig: {
+              temperature: 0.7,
+              maxOutputTokens: 1024
+            }
+          })
+        });
+        
+        if (!response.ok) {
+          const errorText = await response.text();
+          throw new Error(`API Error (${response.status}): ${errorText}`);
+        }
+        
+        const data = await response.json();
+        
+        if (!data.candidates || !data.candidates[0] || !data.candidates[0].content) {
+          throw new Error('Invalid API response format');
+        }
+        
+        const aiMessage = data.candidates[0].content.parts[0].text;
+        
+        // Try to parse as JSON, fallback to plain text
+        try {
+          const parsed = JSON.parse(aiMessage);
+          return parsed;
+        } catch (parseError) {
+          // If JSON parsing fails, return as plain message
+          return { 
+            message: aiMessage, 
+            decision: null 
+          };
+        }
+      } catch (error) {
+        console.error('AI API Error:', error);
+        throw error;
       }
     }
     
